@@ -1,0 +1,1884 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Mapa Mundial Interactivo</title>
+
+<!-- =========================
+LIBRERÍAS EXTERNAS
+========================= -->
+
+<!-- Panzoom para zoom y arrastre -->
+<script src="https://unpkg.com/@panzoom/panzoom/dist/panzoom.min.js"></script>
+
+<!-- Google Font -->
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+
+<style>
+
+/* =========================
+ESTILOS GENERALES
+========================= */
+
+body{
+    margin:0;
+    font-family: 'Patrick Hand', cursive;
+    background:#1e2a38;
+    color:white;
+    overflow:hidden;
+}
+
+h1{
+    text-align:center;
+    margin:10px;
+}
+
+/* =========================
+CONTENEDOR PRINCIPAL
+========================= */
+
+#gameContainer{
+    width:100vw;
+    height:100vh;
+    position:relative;
+    overflow:hidden;
+}
+
+/* =========================
+MAPA GLOBAL
+========================= */
+
+#worldMap{
+    width:100%;
+    height:100%;
+    background:url('FONDO.jpg') center/contain no-repeat;
+    position:absolute;
+}
+
+/* =========================
+REGIONES CLICKABLES
+========================= */
+
+.region{
+    position:absolute;
+    border:2px dashed rgba(255,255,255,0.2);
+    cursor:pointer;
+    transition:0.3s;
+}
+
+.region:hover{
+    background:rgba(255,255,255,0.1);
+}
+
+/* =========================
+REGION VIEW
+========================= */
+
+#regionView{
+    position:absolute;
+    inset:0;
+    background:#000;
+    display:none;
+    overflow:hidden;
+}
+
+#regionImage{
+    width:100%;
+    height:auto;
+    display:block;
+}
+
+/* =========================
+MARCADORES
+========================= */
+
+.marker{
+    position:absolute;
+    width:24px;
+    height:24px;
+    background:gold;
+    border-radius:50%;
+    cursor:pointer;
+    transform:translate(-50%, -50%);
+    animation:bounce 1.2s infinite;
+}
+
+@keyframes bounce{
+    0%,100%{transform:translate(-50%,-50%) translateY(0);}
+    50%{transform:translate(-50%,-50%) translateY(-8px);}
+}
+
+/* =========================
+MODAL PERGAMINO
+========================= */
+
+#modal{
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    width:300px;
+    background:#f5e6c8;
+    color:#3b2f1b;
+    padding:20px;
+    border-radius:10px;
+    display:none;
+    box-shadow:0 10px 30px rgba(0,0,0,0.5);
+}
+
+#modal img{
+    width:100%;
+    border-radius:8px;
+}
+
+button{
+    margin-top:10px;
+    padding:8px 12px;
+    border:none;
+    background:#8b5a2b;
+    color:white;
+    border-radius:6px;
+    cursor:pointer;
+}
+
+/* =========================
+PANEL LATERAL
+========================= */
+
+#sidePanel{
+    position:absolute;
+    right:0;
+    top:0;
+    width:220px;
+    height:100%;
+    background:rgba(0,0,0,0.6);
+    padding:10px;
+    overflow:auto;
+}
+
+/* =========================
+BOTON VOLVER
+========================= */
+
+#backBtn{
+    position:absolute;
+    top:10px;
+    left:10px;
+    z-index:10;
+}
+
+</style>
+</head>
+
+<body>
+
+<h1>🌍 Mapa Mundial Interactivo</h1>
+
+<div id="gameContainer">
+
+    <!-- MAPA GLOBAL -->
+    <div id="worldMap">
+
+        <!-- REGIONES (posiciones aproximadas) -->
+        <div class="region" style="top:10%;left:5%;width:25%;height:30%;" onclick="openRegion(1)"></div>
+        <div class="region" style="top:35%;left:5%;width:25%;height:30%;" onclick="openRegion(2)"></div>
+        <div class="region" style="top:65%;left:10%;width:25%;height:30%;" onclick="openRegion(3)"></div>
+        <div class="region" style="top:10%;left:35%;width:25%;height:30%;" onclick="openRegion(4)"></div>
+        <div class="region" style="top:45%;left:40%;width:20%;height:40%;" onclick="openRegion(5)"></div>
+        <div class="region" style="top:20%;left:60%;width:25%;height:30%;" onclick="openRegion(6)"></div>
+        <div class="region" style="top:40%;left:70%;width:25%;height:30%;" onclick="openRegion(7)"></div>
+        <div class="region" style="top:65%;left:70%;width:25%;height:30%;" onclick="openRegion(8)"></div>
+
+    </div>
+
+    <!-- REGION VIEW -->
+    <div id="regionView">
+        <button id="backBtn" onclick="closeRegion()">⬅ Volver</button>
+        <div id="panzoomContainer">
+            <img id="regionImage">
+            <div id="markersContainer"></div>
+        </div>
+    </div>
+
+    <!-- MODAL -->
+    <div id="modal">
+        <h3 id="modalTitle"></h3>
+        <img id="modalImg" src="">
+        <p id="modalDesc"></p>
+        <button id="modalLink">Saber más</button>
+        <button onclick="closeModal()">Cerrar</button>
+    </div>
+
+    <!-- PANEL -->
+    <div id="sidePanel">
+        <h3>Puntuación</h3>
+        <div id="score">0</div>
+
+        <h3>Misión</h3>
+        <div id="missionText"></div>
+    </div>
+
+</div>
+
+<script>
+
+/* =====================================================
+ESTADO DEL JUEGO
+===================================================== */
+
+const gameState = {
+    score:0,
+    discovered:new Set(),
+    mission:{
+        targetType:"animal",
+        goal:3,
+        progress:0
+    }
+}
+
+/* =====================================================
+DATOS DE OBJETOS (EJEMPLO — PUEDES AMPLIAR)
+===================================================== */
+
+const regionsData = {
+
+    1:{
+        image:"FONDO 1.JPG",
+        items:[
+            {
+id:"montanas_rocosas",
+type:"naturaleza",
+name:"Montañas Rocosas",
+description:"Una gran cadena montañosa que atraviesa América del Norte con paisajes espectaculares.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Monta%C3%B1as_Rocosas",
+x:35,
+y:35
+},
+
+{
+id:"alce",
+type:"animal",
+name:"Alce",
+description:"El alce es el ciervo más grande del mundo y vive en bosques fríos de Norteamérica.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Alces_alces",
+x:50,
+y:39
+},
+
+{
+id:"oso_pardo",
+type:"animal",
+name:"Oso Pardo",
+description:"Un gran mamífero omnívoro que habita en bosques y montañas.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Ursus_arctos",
+x:60,
+y:35
+},
+
+{
+id:"gastronomia_estadounidense",
+type:"gastronomia",
+name:"Gastronomía Estadounidense",
+description:"La comida típica incluye hamburguesas, hot dogs y barbacoa.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Gastronom%C3%ADa_de_los_Estados_Unidos",
+x:45,
+y:45
+},
+
+{
+id:"aguila_calva",
+type:"animal",
+name:"Águila Calva",
+description:"Ave símbolo de Estados Unidos, conocida por su gran tamaño y fuerza.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Haliaeetus_leucocephalus",
+x:50,
+y:30
+},
+
+{
+id:"las_vegas",
+type:"ciudad",
+name:"Las Vegas",
+description:"Ciudad famosa por sus casinos, espectáculos y vida nocturna.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Las_Vegas",
+x:35,
+y:55
+},
+
+{
+id:"cactus",
+type:"naturaleza",
+name:"Cáctus",
+description:"Planta adaptada al desierto que almacena agua en sus tejidos.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Cactaceae",
+x:30,
+y:60
+},
+
+{
+id:"sequoya_gigante",
+type:"naturaleza",
+name:"Secuoya Gigante",
+description:"Uno de los árboles más grandes y longevos del planeta.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Sequoiadendron_giganteum",
+x:28,
+y:48
+},
+
+{
+id:"vancouver",
+type:"ciudad",
+name:"Vancouver",
+description:"Ciudad canadiense conocida por su naturaleza y calidad de vida.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Vancouver",
+x:22,
+y:22
+},
+
+{
+id:"san_francisco",
+type:"ciudad",
+name:"San Francisco",
+description:"Ciudad famosa por sus colinas, tranvías y el puente Golden Gate.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/San_Francisco",
+x:28,
+y:50
+},
+
+{
+id:"puente_golden_gate",
+type:"arquitectura",
+name:"Puente Golden Gate",
+description:"Uno de los puentes más famosos del mundo ubicado en California.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Golden_Gate_Bridge",
+x:29,
+y:52
+},
+
+{
+id:"silicon_valley",
+type:"tecnologia",
+name:"Silicon Valley",
+description:"Región tecnológica donde nacieron grandes empresas como Apple y Google.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Silicon_Valley",
+x:32,
+y:55
+},
+
+{
+id:"los_angeles",
+type:"ciudad",
+name:"Los Ángeles",
+description:"Ciudad conocida por Hollywood y la industria del cine.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Los_%C3%81ngeles",
+x:30,
+y:58
+},
+
+{
+id:"hollywood",
+type:"cultura",
+name:"Hollywood",
+description:"Centro mundial de la industria cinematográfica.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Hollywood",
+x:31,
+y:58
+},
+
+{
+id:"parques_tematicos_california",
+type:"recreacion",
+name:"Parques temáticos de California",
+description:"Incluyen famosos parques como Disneyland y Universal Studios.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Disneyland",
+x:32,
+y:60
+},
+
+{
+id:"marilyn_monroe",
+type:"personaje",
+name:"Marilyn Monroe",
+description:"Actriz icónica del cine estadounidense del siglo XX.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Marilyn_Monroe",
+x:33,
+y:57
+},
+
+{
+id:"phoenix",
+type:"ciudad",
+name:"Phoenix",
+description:"Ciudad ubicada en el desierto de Arizona.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Phoenix",
+x:35,
+y:65
+},
+
+{
+id:"gran_canon",
+type:"naturaleza",
+name:"Gran Cañón",
+description:"Una impresionante formación natural creada por el río Colorado.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Gran_Ca%C3%B1%C3%B3n",
+x:34,
+y:60
+},
+
+{
+id:"desierto_arizona",
+type:"naturaleza",
+name:"Desierto de Arizona",
+description:"Región árida con gran diversidad de plantas y animales adaptados.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Desierto_de_Sonora",
+x:36,
+y:68
+},
+
+{
+id:"indios_yaquis",
+type:"cultura",
+name:"Indios Yaquis",
+description:"Pueblo indígena originario del norte de México.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Yaqui",
+x:38,
+y:72
+},
+
+{
+id:"energia_nuclear",
+type:"tecnologia",
+name:"Energía Nuclear",
+description:"Forma de energía obtenida a partir de reacciones nucleares.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Energ%C3%ADa_nuclear",
+x:50,
+y:50
+},
+
+{
+id:"dallas",
+type:"ciudad",
+name:"Dallas",
+description:"Ciudad importante del estado de Texas.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Dallas",
+x:50,
+y:65
+},
+
+{
+id:"houston",
+type:"ciudad",
+name:"Houston",
+description:"Centro espacial y ciudad petrolera de Texas.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Houston",
+x:52,
+y:68
+},
+
+{
+id:"estacion_espacial",
+type:"tecnologia",
+name:"Estación Espacial",
+description:"Laboratorio en órbita alrededor de la Tierra.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Estaci%C3%B3n_Espacial_Internacional",
+x:55,
+y:20
+},
+
+{
+id:"viuda_negra",
+type:"animal",
+name:"Viuda Negra",
+description:"Araña venenosa conocida por su marca roja característica.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Latrodectus",
+x:40,
+y:70
+},
+
+{
+id:"conejo_domestico",
+type:"animal",
+name:"Conejo Doméstico",
+description:"Mamífero herbívoro común como mascota.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Oryctolagus_cuniculus",
+x:45,
+y:60
+},
+
+{
+id:"disney_world",
+type:"recreacion",
+name:"Disney World",
+description:"Uno de los parques temáticos más grandes del mundo.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Walt_Disney_World_Resort",
+x:60,
+y:75
+},
+
+{
+id:"neil_armstrong",
+type:"personaje",
+name:"Neil Armstrong",
+description:"Primer ser humano en caminar sobre la Luna.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Neil_Armstrong",
+x:55,
+y:40
+},
+
+{
+id:"blues",
+type:"musica",
+name:"Blues",
+description:"Género musical originado en comunidades afroamericanas.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Blues",
+x:52,
+y:70
+},
+
+{
+id:"jazz",
+type:"musica",
+name:"Jazz",
+description:"Estilo musical nacido en Nueva Orleans.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Jazz",
+x:60,
+y:68
+},
+
+{
+id:"kennedy",
+type:"personaje",
+name:"John F. Kennedy",
+description:"Presidente estadounidense durante la Guerra Fría.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/John_F._Kennedy",
+x:70,
+y:45
+},
+
+{
+id:"abraham_lincoln",
+type:"personaje",
+name:"Abraham Lincoln",
+description:"Presidente que abolió la esclavitud en Estados Unidos.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Abraham_Lincoln",
+x:60,
+y:50
+},
+
+{
+id:"martin_luther_king",
+type:"personaje",
+name:"Martin Luther King Jr.",
+description:"Líder del movimiento por los derechos civiles.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Martin_Luther_King",
+x:62,
+y:60
+},
+
+{
+id:"chicago",
+type:"ciudad",
+name:"Chicago",
+description:"Ciudad conocida por su arquitectura y lago Michigan.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Chicago",
+x:60,
+y:48
+},
+
+{
+id:"capitolio",
+type:"arquitectura",
+name:"Capitolio",
+description:"Edificio del Congreso de Estados Unidos.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Capitolio_de_los_Estados_Unidos",
+x:68,
+y:52
+},
+
+{
+id:"philadelphia",
+type:"ciudad",
+name:"Philadelphia",
+description:"Ciudad histórica donde se firmó la independencia.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Filadelfia",
+x:72,
+y:55
+},
+
+{
+id:"nueva_york",
+type:"ciudad",
+name:"Nueva York",
+description:"Una de las ciudades más influyentes del mundo.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Nueva_York",
+x:75,
+y:52
+},
+
+{
+id:"estatua_libertad",
+type:"arquitectura",
+name:"Estatua de la Libertad",
+description:"Símbolo de libertad ubicado en Nueva York.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Estatua_de_la_Libertad",
+x:76,
+y:54
+},
+
+{
+id:"universidad_harvard",
+type:"educacion",
+name:"Universidad de Harvard",
+description:"Una de las universidades más prestigiosas del mundo.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Universidad_de_Harvard",
+x:78,
+y:50
+},
+
+{
+id:"andy_warhol",
+type:"personaje",
+name:"Andy Warhol",
+description:"Artista líder del movimiento pop art.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Andy_Warhol",
+x:74,
+y:48
+},
+
+{
+id:"ballena_orca",
+type:"animal",
+name:"Ballena Orca",
+description:"Mamífero marino depredador muy inteligente.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Orcinus_orca",
+x:15,
+y:30
+},
+
+{
+id:"mariposa_monarca",
+type:"animal",
+name:"Mariposa Monarca",
+description:"Famosa por su migración entre Canadá y México.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Danaus_plexippus",
+x:50,
+y:75
+},
+
+{
+id:"nopal",
+type:"naturaleza",
+name:"Nopal",
+description:"Planta comestible típica de México.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Opuntia",
+x:42,
+y:78
+},
+
+{
+id:"emiliano_zapata",
+type:"personaje",
+name:"Emiliano Zapata",
+description:"Revolucionario mexicano defensor de los campesinos.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Emiliano_Zapata",
+x:45,
+y:80
+},
+
+{
+id:"portaviones",
+type:"tecnologia",
+name:"Portaviones",
+description:"Buque de guerra diseñado para transportar aviones.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Portaaviones",
+x:20,
+y:50
+},
+
+{
+id:"erizo_rojo_mar",
+type:"animal",
+name:"Erizo Rojo de Mar",
+description:"Animal marino con espinas que vive en el océano.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Strongylocentrotus_franciscanus",
+x:18,
+y:55
+},
+
+{
+id:"oso_polar",
+type:"animal",
+name:"Oso Polar",
+description:"Gran depredador del Ártico adaptado al frío extremo.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Ursus_maritimus",
+x:25,
+y:5
+},
+
+{
+id:"toronto",
+type:"ciudad",
+name:"Toronto",
+description:"Ciudad más grande de Canadá.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Toronto",
+x:60,
+y:25
+},
+
+{
+id:"policia_montada",
+type:"cultura",
+name:"Policía Montada Canadiense",
+description:"Fuerza policial federal de Canadá.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Real_Polic%C3%ADa_Montada_del_Canad%C3%A1",
+x:55,
+y:20
+},
+
+{
+id:"arbol_maple",
+type:"naturaleza",
+name:"Árbol de Maple",
+description:"Árbol símbolo de Canadá.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Acer",
+x:50,
+y:18
+},
+
+{
+id:"montreal",
+type:"ciudad",
+name:"Montreal",
+description:"Ciudad canadiense de influencia francesa.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Montreal",
+x:65,
+y:22
+
+}
+]
+    },
+
+
+
+    2:{
+        image:"FONDO 2.JPG",
+        items:[
+            
+{
+id:"vaqueros",
+type:"cultura",
+name:"Vaqueros",
+description:"Jinetes tradicionales que trabajan con ganado en América.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Vaquero",
+x:35,
+y:40
+},
+
+{
+id:"manati",
+type:"animal",
+name:"Manatí",
+description:"Mamífero marino herbívoro que vive en aguas cálidas.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Trichechus",
+x:55,
+y:45
+},
+
+{
+id:"tortuga_galapagos",
+type:"animal",
+name:"Tortuga Gigante de Galápagos",
+description:"Una de las tortugas más grandes y longevas del mundo.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Chelonoidis_nigra",
+x:20,
+y:70
+},
+
+{
+id:"gastronomia_mexicana",
+type:"gastronomia",
+name:"Gastronomía Mexicana",
+description:"Famosa por sus tacos, mole y diversidad de sabores.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Gastronom%C3%ADa_de_M%C3%A9xico",
+x:40,
+y:35
+},
+
+{
+id:"monterrey",
+type:"ciudad",
+name:"Monterrey",
+description:"Importante ciudad industrial del norte de México.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Monterrey",
+x:45,
+y:20
+},
+
+{
+id:"catrina",
+type:"cultura",
+name:"La Catrina",
+description:"Figura tradicional mexicana asociada al Día de Muertos.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/La_Catrina",
+x:38,
+y:38
+},
+
+{
+id:"guanajuato_sanmiguel",
+type:"ciudad",
+name:"Guanajuato y San Miguel",
+description:"Ciudades coloniales mexicanas de gran valor cultural.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Guanajuato",
+x:38,
+y:45
+},
+
+{
+id:"catedral_guadalajara",
+type:"arquitectura",
+name:"Catedral de Guadalajara",
+description:"Catedral histórica ubicada en Jalisco.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Catedral_de_Guadalajara",
+x:35,
+y:48
+},
+
+{
+id:"momias_guanajuato",
+type:"cultura",
+name:"Momias de Guanajuato",
+description:"Momias naturales descubiertas en México.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Momias_de_Guanajuato",
+x:37,
+y:47
+},
+
+{
+id:"angel_independencia",
+type:"arquitectura",
+name:"Ángel de la Independencia",
+description:"Monumento emblemático de Ciudad de México.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/%C3%81ngel_de_la_Independencia",
+x:42,
+y:42
+},
+
+{
+id:"catedral_metropolitana",
+type:"arquitectura",
+name:"Catedral Metropolitana",
+description:"Principal catedral de Ciudad de México.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Catedral_Metropolitana_de_M%C3%A9xico",
+x:42,
+y:44
+},
+
+{
+id:"lucha_libre",
+type:"recreacion",
+name:"Lucha Libre",
+description:"Deporte espectáculo popular en México.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Lucha_libre_profesional",
+x:40,
+y:50
+},
+
+{
+id:"ciudad_mexico",
+type:"ciudad",
+name:"Ciudad de México",
+description:"Capital de México y una de las ciudades más grandes del mundo.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Ciudad_de_M%C3%A9xico",
+x:42,
+y:45
+},
+
+{
+id:"bellas_artes",
+type:"museo",
+name:"Bellas Artes",
+description:"Palacio cultural más importante de México.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Palacio_de_Bellas_Artes",
+x:43,
+y:46
+},
+
+{
+id:"mariachi",
+type:"musica",
+name:"Mariachi y música ranchera",
+description:"Género musical tradicional mexicano.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Mariachi",
+x:36,
+y:50
+},
+
+{
+id:"frida_kahlo",
+type:"personaje",
+name:"Frida Kahlo",
+description:"Pintora mexicana reconocida mundialmente.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Frida_Kahlo",
+x:44,
+y:46
+},
+
+{
+id:"aguila_real",
+type:"animal",
+name:"Águila Real",
+description:"Ave símbolo nacional de México.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Aquila_chrysaetos",
+x:38,
+y:30
+},
+
+{
+id:"oaxaca",
+type:"ciudad",
+name:"Oaxaca",
+description:"Estado mexicano famoso por su cultura y gastronomía.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Oaxaca_de_Ju%C3%A1rez",
+x:45,
+y:55
+},
+
+{
+id:"arbol_tule",
+type:"naturaleza",
+name:"Árbol del Tule",
+description:"Uno de los árboles con mayor diámetro del mundo.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/%C3%81rbol_del_Tule",
+x:46,
+y:56
+},
+
+{
+id:"hierve_el_agua",
+type:"naturaleza",
+name:"Hierve el Agua",
+description:"Formaciones minerales que parecen cascadas petrificadas.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Hierve_el_Agua",
+x:47,
+y:58
+},
+
+{
+id:"voladores_papantla",
+type:"cultura",
+name:"Voladores de Papantla",
+description:"Danza ritual tradicional mexicana.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Voladores_de_Papantla",
+x:50,
+y:48
+},
+
+{
+id:"palenque",
+type:"ruinas",
+name:"Palenque",
+description:"Antigua ciudad maya en Chiapas.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Palenque",
+x:52,
+y:60
+},
+
+{
+id:"chichen_itza",
+type:"ruinas",
+name:"Chichén Itzá",
+description:"Una de las siete maravillas del mundo moderno.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Chich%C3%A9n_Itz%C3%A1",
+x:58,
+y:60
+},
+
+{
+id:"merida",
+type:"ciudad",
+name:"Mérida",
+description:"Ciudad histórica del sureste mexicano.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/M%C3%A9rida_(M%C3%A9xico)",
+x:57,
+y:58
+},
+
+{
+id:"cancun",
+type:"ciudad",
+name:"Cancún",
+description:"Destino turístico famoso por sus playas.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Canc%C3%BAn",
+x:60,
+y:62
+},
+
+{
+id:"tulum",
+type:"ruinas",
+name:"Tulum",
+description:"Zona arqueológica maya frente al mar Caribe.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Tulum",
+x:61,
+y:64
+},
+
+{
+id:"cenotes",
+type:"naturaleza",
+name:"Cenotes",
+description:"Pozos naturales de agua dulce en la península de Yucatán.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Cenote",
+x:59,
+y:63
+},
+
+{
+id:"che_guevara",
+type:"personaje",
+name:"Che Guevara",
+description:"Revolucionario argentino-cubano.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Che_Guevara",
+x:30,
+y:55
+},
+
+{
+id:"salsa",
+type:"musica",
+name:"Salsa",
+description:"Género musical y baile originado en el Caribe.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Salsa_(g%C3%A9nero_musical)",
+x:50,
+y:45
+},
+
+{
+id:"cruceros",
+type:"tecnologia",
+name:"Grandes Cruceros",
+description:"Barcos turísticos que recorren el Caribe.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Crucero_(buque)",
+x:55,
+y:50
+},
+
+{
+id:"iguana",
+type:"animal",
+name:"Iguana",
+description:"Reptil común en zonas tropicales.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Iguanidae",
+x:53,
+y:65
+},
+
+{
+id:"ciudad_panama",
+type:"ciudad",
+name:"Ciudad de Panamá",
+description:"Capital de Panamá y centro comercial internacional.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Ciudad_de_Panam%C3%A1",
+x:60,
+y:70
+},
+
+{
+id:"canal_panama",
+type:"arquitectura",
+name:"Canal de Panamá",
+description:"Canal que conecta el océano Atlántico y Pacífico.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Canal_de_Panam%C3%A1",
+x:62,
+y:72
+},
+
+{
+id:"simon_bolivar",
+type:"personaje",
+name:"Simón Bolívar",
+description:"Líder de la independencia de varios países sudamericanos.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Sim%C3%B3n_Bol%C3%ADvar",
+x:70,
+y:60
+},
+
+{
+id:"bogota",
+type:"ciudad",
+name:"Bogotá",
+description:"Capital de Colombia.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Bogot%C3%A1",
+x:72,
+y:65
+},
+
+{
+id:"medellin",
+type:"ciudad",
+name:"Medellín",
+description:"Ciudad colombiana conocida por su innovación.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Medell%C3%ADn",
+x:70,
+y:67
+},
+
+{
+id:"caracas",
+type:"ciudad",
+name:"Caracas",
+description:"Capital de Venezuela.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Caracas",
+x:75,
+y:62
+},
+
+{
+id:"gabriel_garcia_marquez",
+type:"personaje",
+name:"Gabriel García Márquez",
+description:"Escritor colombiano ganador del Nobel.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Gabriel_Garc%C3%ADa_M%C3%A1rquez",
+x:73,
+y:66
+},
+
+{
+id:"fernando_botero",
+type:"personaje",
+name:"Fernando Botero",
+description:"Artista colombiano famoso por figuras voluminosas.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Fernando_Botero",
+x:72,
+y:68
+},
+
+{
+id:"parque_canaima",
+type:"naturaleza",
+name:"Parque Nacional Canaima",
+description:"Parque natural con paisajes únicos en Venezuela.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Parque_nacional_Canaima",
+x:80,
+y:70
+},
+
+{
+id:"salto_angel",
+type:"naturaleza",
+name:"Cascada Salto Ángel",
+description:"La cascada más alta del mundo.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Salto_%C3%81ngel",
+x:82,
+y:72
+},
+
+{
+id:"selva_amazonas",
+type:"naturaleza",
+name:"Selva Amazónica",
+description:"La selva tropical más grande del planeta.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Amazonia",
+x:75,
+y:78
+},
+
+{
+id:"lima",
+type:"ciudad",
+name:"Lima",
+description:"Capital de Perú ubicada en la costa del Pacífico.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Lima",
+x:68,
+y:85
+},
+
+{
+id:"cuzco",
+type:"ciudad",
+name:"Cuzco",
+description:"Antigua capital del Imperio Inca.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Cuzco",
+x:70,
+y:88
+},
+
+{
+id:"machu_picchu",
+type:"ruinas",
+name:"Machu Picchu",
+description:"Ciudadela inca en los Andes peruanos.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Machu_Picchu",
+x:72,
+y:90
+},
+
+{
+id:"vinicunca",
+type:"naturaleza",
+name:"Montaña Vinicunca",
+description:"Montaña de colores en Perú.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Vinicunca",
+x:74,
+y:92
+},
+
+{
+id:"tayrona",
+type:"naturaleza",
+name:"Parque Nacional Tayrona",
+description:"Parque natural colombiano junto al mar Caribe.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Parque_nacional_natural_Tayrona",
+x:70,
+y:60
+},
+
+{
+id:"valle_cocora",
+type:"naturaleza",
+name:"Valle de Cocora",
+description:"Valle famoso por sus palmas gigantes.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Valle_de_Cocora",
+x:71,
+y:66
+},
+
+{
+id:"gastronomia_peruana",
+type:"gastronomia",
+name:"Gastronomía Peruana",
+description:"Una de las cocinas más reconocidas del mundo.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Gastronom%C3%ADa_del_Per%C3%BA",
+x:69,
+y:86
+},
+
+{
+id:"boa",
+type:"animal",
+name:"Boa",
+description:"Serpiente grande que mata por constricción.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Boa_constrictor",
+x:76,
+y:80
+},
+
+{
+id:"gastronomia_brasilena",
+type:"gastronomia",
+name:"Gastronomía Brasileña",
+description:"Cocina variada con influencia indígena y portuguesa.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Gastronom%C3%ADa_de_Brasil",
+x:78,
+y:82
+},
+
+{
+id:"samba",
+type:"musica",
+name:"Samba",
+description:"Ritmo musical y baile tradicional de Brasil.",
+imageUrl:"https://placehold.co/300x200",
+link:"https://es.wikipedia.org/wiki/Samba_(m%C3%BAsica)",
+x:80,
+y:85
+}
+]
+
+    },
+
+3:{
+        image:"FONDO 3.JPG",
+        items:[
+
+            {
+                id:"torre_eiffel",
+                type:"arquitectura",
+                name:"Torre Eiffel",
+                description:"Monumento icónico de París y símbolo de Francia.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Torre_Eiffel",
+                x:45,
+                y:40
+            },
+
+            {
+                id:"paris",
+                type:"ciudad",
+                name:"París",
+                description:"Capital de Francia conocida por su arte y cultura.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Par%C3%ADs",
+                x:44,
+                y:42
+            },
+
+            {
+                id:"coliseo",
+                type:"arquitectura",
+                name:"Coliseo Romano",
+                description:"Anfiteatro histórico del Imperio Romano en Italia.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Coliseo",
+                x:55,
+                y:55
+            },
+
+            {
+                id:"roma",
+                type:"ciudad",
+                name:"Roma",
+                description:"Capital de Italia con gran patrimonio histórico.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Roma",
+                x:56,
+                y:56
+            },
+
+            {
+                id:"big_ben",
+                type:"arquitectura",
+                name:"Big Ben",
+                description:"Reloj icónico del Palacio de Westminster en Londres.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Big_Ben",
+                x:35,
+                y:30
+            },
+
+            {
+                id:"londres",
+                type:"ciudad",
+                name:"Londres",
+                description:"Capital del Reino Unido.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Londres",
+                x:36,
+                y:32
+            },
+
+            {
+                id:"sagrada_familia",
+                type:"arquitectura",
+                name:"Sagrada Familia",
+                description:"Basílica diseñada por Gaudí en Barcelona.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Sagrada_Familia",
+                x:48,
+                y:60
+            },
+
+            {
+                id:"barcelona",
+                type:"ciudad",
+                name:"Barcelona",
+                description:"Ciudad española famosa por su arquitectura.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Barcelona",
+                x:47,
+                y:62
+            }
+
+        ]
+    },
+
+
+
+4:{
+        image:"FONDO 4.JPG",
+        items:[
+
+            {
+                id:"pirámides_giza",
+                type:"arquitectura",
+                name:"Pirámides de Giza",
+                description:"Antiguas estructuras funerarias en Egipto.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Pir%C3%A1mides_de_Giza",
+                x:55,
+                y:30
+            },
+
+            {
+                id:"esfinge",
+                type:"arquitectura",
+                name:"Gran Esfinge",
+                description:"Escultura monumental en Egipto.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Gran_Esfinge_de_Giza",
+                x:57,
+                y:32
+            },
+
+            {
+                id:"leon",
+                type:"animal",
+                name:"León",
+                description:"Gran felino conocido como el rey de la selva.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Panthera_leo",
+                x:45,
+                y:55
+            },
+
+            {
+                id:"jirafa",
+                type:"animal",
+                name:"Jirafa",
+                description:"Animal terrestre más alto del mundo.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Giraffa",
+                x:48,
+                y:60
+            },
+
+            {
+                id:"elefante_africano",
+                type:"animal",
+                name:"Elefante Africano",
+                description:"El mamífero terrestre más grande.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Loxodonta",
+                x:50,
+                y:65
+            }
+
+        ]
+    },
+
+
+
+    5:{
+        image:"FONDO 5.JPG",
+        items:[
+
+            {
+                id:"burj_khalifa",
+                type:"arquitectura",
+                name:"Burj Khalifa",
+                description:"Edificio más alto del mundo en Dubái.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Burj_Khalifa",
+                x:60,
+                y:55
+            },
+
+            {
+                id:"petra",
+                type:"ruinas",
+                name:"Petra",
+                description:"Antigua ciudad excavada en roca en Jordania.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Petra",
+                x:50,
+                y:60
+            },
+
+            {
+                id:"camello",
+                type:"animal",
+                name:"Camello",
+                description:"Mamífero adaptado al desierto.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Camelus",
+                x:55,
+                y:70
+            }
+
+        ]
+    },
+
+
+
+    6:{
+        image:"FONDO 6.JPG",
+        items:[
+
+            {
+                id:"gran_muralla",
+                type:"arquitectura",
+                name:"Gran Muralla China",
+                description:"Antigua fortificación que atraviesa China.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Gran_Muralla_China",
+                x:60,
+                y:40
+            },
+
+            {
+                id:"taj_mahal",
+                type:"arquitectura",
+                name:"Taj Mahal",
+                description:"Mausoleo de mármol en la India.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Taj_Mahal",
+                x:55,
+                y:65
+            },
+
+            {
+                id:"panda",
+                type:"animal",
+                name:"Oso Panda",
+                description:"Mamífero emblemático de China.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Ailuropoda_melanoleuca",
+                x:62,
+                y:45
+            }
+
+        ]
+    },
+
+
+    7:{
+        image:"FONDO 7.JPG",
+        items:[
+
+            {
+                id:"opera_sidney",
+                type:"arquitectura",
+                name:"Ópera de Sídney",
+                description:"Edificio emblemático de Australia.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Opera_de_S%C3%ADdney",
+                x:70,
+                y:70
+            },
+
+            {
+                id:"canguro",
+                type:"animal",
+                name:"Canguro",
+                description:"Marsupial característico de Australia.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Macropus",
+                x:65,
+                y:65
+            },
+
+            {
+                id:"gran_barrera",
+                type:"naturaleza",
+                name:"Gran Barrera de Coral",
+                description:"Mayor arrecife de coral del mundo.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Gran_Barrera_de_Coral",
+                x:75,
+                y:60
+            }
+
+        ]
+    },
+
+
+
+8:{
+        image:"FONDO 8.JPG",
+        items:[
+
+            {
+                id:"pinguino",
+                type:"animal",
+                name:"Pingüino",
+                description:"Ave marina que no vuela y vive en regiones frías.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Spheniscidae",
+                x:50,
+                y:70
+            },
+
+            {
+                id:"iglú",
+                type:"cultura",
+                name:"Iglú",
+                description:"Refugio construido con bloques de hielo.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Igl%C3%BA",
+                x:45,
+                y:40
+            },
+
+            {
+                id:"aurora",
+                type:"naturaleza",
+                name:"Aurora Polar",
+                description:"Fenómeno luminoso en los cielos polares.",
+                imageUrl:"https://placehold.co/300x200",
+                link:"https://es.wikipedia.org/wiki/Aurora_polar",
+                x:55,
+                y:30
+            }
+
+        ]
+    }
+};
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+    
+
+
+
+    
+
+    
+    
+
+
+
+
+
+
+/* =====================================================
+ABRIR REGION
+===================================================== */
+
+let panzoomInstance;
+
+function openRegion(id){
+
+    const region = regionsData[id];
+    if(!region) return;
+
+    document.getElementById("worldMap").style.display="none";
+    document.getElementById("regionView").style.display="block";
+
+    const img = document.getElementById("regionImage");
+    img.src = region.image;
+
+    const markersContainer = document.getElementById("markersContainer");
+    markersContainer.innerHTML="";
+
+    region.items.forEach(item=>{
+        createMarker(item);
+    });
+
+    // Panzoom
+    const elem = document.getElementById("panzoomContainer");
+
+    if(panzoomInstance) panzoomInstance.destroy();
+
+    panzoomInstance = Panzoom(elem,{
+        maxScale:4,
+        contain:"outside"
+    });
+
+    elem.addEventListener('wheel', panzoomInstance.zoomWithWheel);
+
+}
+
+/* =====================================================
+CERRAR REGION
+===================================================== */
+
+function closeRegion(){
+    document.getElementById("worldMap").style.display="block";
+    document.getElementById("regionView").style.display="none";
+}
+
+/* =====================================================
+CREAR MARCADOR
+===================================================== */
+
+function createMarker(item){
+
+    const marker = document.createElement("div");
+    marker.className="marker";
+
+    marker.style.left = item.x + "%";
+    marker.style.top = item.y + "%";
+
+    marker.onclick = ()=> openItem(item);
+
+    document.getElementById("markersContainer").appendChild(marker);
+}
+
+/* =====================================================
+ABRIR ITEM
+===================================================== */
+
+function openItem(item){
+
+    document.getElementById("modal").style.display="block";
+
+    document.getElementById("modalTitle").innerText = item.name;
+    document.getElementById("modalDesc").innerText = item.description;
+    document.getElementById("modalImg").src = item.imageUrl;
+
+    document.getElementById("modalLink").onclick = ()=>{
+        window.open(item.link,"_blank");
+    }
+
+    // puntuación
+    if(!gameState.discovered.has(item.id)){
+        gameState.discovered.add(item.id);
+        addScore(10);
+
+        // misión
+        if(item.type === gameState.mission.targetType){
+            gameState.mission.progress++;
+            checkMission();
+        }
+    }
+}
+
+/* =====================================================
+MODAL
+===================================================== */
+
+function closeModal(){
+    document.getElementById("modal").style.display="none";
+}
+
+/* =====================================================
+PUNTUACIÓN
+===================================================== */
+
+function addScore(points){
+    gameState.score += points;
+    document.getElementById("score").innerText = gameState.score;
+}
+
+/* =====================================================
+MISIÓN
+===================================================== */
+
+function checkMission(){
+
+    if(gameState.mission.progress >= gameState.mission.goal){
+        alert("🎉 ¡Misión completada!");
+        gameState.mission.progress = 0;
+    }
+
+    updateMissionUI();
+}
+
+function updateMissionUI(){
+    document.getElementById("missionText").innerText =
+        `Encuentra ${gameState.mission.goal} ${gameState.mission.targetType}s (${gameState.mission.progress}/${gameState.mission.goal})`;
+}
+
+updateMissionUI();
+
+</script>
+
+</body>
+</html>
