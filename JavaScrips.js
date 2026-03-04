@@ -3,7 +3,7 @@ regionsData =
 
 
   {
-     image:"FONDO 1.jpg",
+     image:"fondo1.jpg",
      items:[ 
 
         { id:"montanas_rocosas", type:"naturaleza", name:"Montañas Rocosas", x:25, y:40 },
@@ -65,7 +65,7 @@ regionsData =
 
 
 {
-image:"fondo 2.JPG",
+image:"fondo2.jpg",
 items[
 { id:"vaqueros", type:"cultura", name:"Vaqueros", x:35, y:55 },
 { id:"manati", type:"animal", name:"Manatí", x:60, y:65 },
@@ -127,7 +127,7 @@ items[
 
 
 {
-image:"fondo 3.JPG",
+image:"fondo3.jpg",
 items[
 
 { id:"ballena_azul", type:"animal", name:"Ballena Azul", x:20, y:55 },
@@ -155,7 +155,7 @@ items[
 
 
 {
-image:"fondo 4.JPG",
+image:"fondo4.jpg",
 items[
 
 { id:"san_patricio", type:"festividad", name:"San Patricio", x:35, y:35 },
@@ -240,7 +240,7 @@ items[
 
 
 {
-image:"fondo 5.JPG",
+image:"fondo5.jpg",
 items[
 
 { id:"lagos", type:"ciudad", name:"Lagos Nigeria", x:45, y:55 },
@@ -263,7 +263,7 @@ items[
 
 
 {
-image:"fondo 6.JPG",
+image:"fondo6.jpg",
 items[
 
 { id:"camello", type:"animal", name:"Camello", x:45, y:55 },
@@ -300,7 +300,7 @@ items[
 
 
 {
-image:"fondo 7.JPG",
+image:"fondo7.jpg",
 items[
 
 { id:"everest", type:"naturaleza", name:"Monte Everest", x:45, y:45 },
@@ -351,7 +351,7 @@ items[
 
 
 {
-image:"fondo 8.JPG",
+image:"fondo8.jpg",
 items[
 
 { id:"surf", type:"actividad", name:"Surf", x:55, y:65 },
